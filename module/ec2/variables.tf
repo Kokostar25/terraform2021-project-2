@@ -8,7 +8,7 @@ variable "ec2_keypair" {
 }
 
 variable "instance_type" {
-    default = "t2_micro"
+    default = "t2.micro"
 }
 
 variable "ec2_ami" {

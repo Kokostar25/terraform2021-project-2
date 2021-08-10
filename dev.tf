@@ -26,7 +26,7 @@ module "networking" {
   source                 = "./module/ec2"
   ec2_keypair            = var.ec2_keypair
   instance_type          = var.instance_type
-  subnet_ids             = ["module.my_subnet.pub_subnet_id","module.my_subnet.pri_subnet_id"]
+  subnet_ids             = ["module.my_subnet.pub_subnet_id", "module.my_subnet.pri_subnet_id"]
   ec2_ami                = var.ec2_ami
   vpc_id                 = module.vpc.koko-vpc_id
   private_subnet         = var.private_subnet

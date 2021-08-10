@@ -4,9 +4,8 @@ resource "aws_instance" "koko-pub-EC2" {
     ami         = var.ec2_ami
     instance_type = var.instance_type
     key_name = var.ec2_keypair
-    subnet_id = var.subnet_ids
-    // subnet_id = element(module.my_subnet.pub_subnet_id, count.index)   
-    vpc_security_group_ids = aws_security_group.koko-public-sg.id
+    subnet_id = var.subnet_ids[count.index]
+    vpc_security_group_ids = [aws_security_group.koko-public-sg.id]
     availability_zone = element(var.availability_zones, count.index)
     user_data = <<EOF
                 #!/bin/bash
@@ -27,9 +26,8 @@ resource "aws_instance" "koko-pri-EC2" {
     ami           = var.ec2_ami
     instance_type = var.instance_type
     key_name      = var.ec2_keypair
-    subnet_id = var.subnet_ids
-    #subnet_id = element(module.my_subnet.pri_subnet_id, count.index)
-    vpc_security_group_ids = aws_security_group.koko-private-sg.id
+    subnet_id = var.subnet_ids[count.index]
+    vpc_security_group_ids = [aws_security_group.koko-private-sg.id]
     availability_zone = element(var.availability_zones, count.index)
 
      user_data = <<EOF
