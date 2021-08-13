@@ -27,11 +27,11 @@ module "subnet" {
 
 module "networking" {
 
-  source                 = "./module/ec2"
-  ec2_keypair            = var.ec2_keypair
-  instance_type          = var.instance_type
-  subnet_ids             = module.subnet.public_subnet_id 
-                          // module.subnet.private_subnet_id]
+  source        = "./module/ec2"
+  ec2_keypair   = var.ec2_keypair
+  instance_type = var.instance_type
+  subnet_ids    = module.subnet.public_subnet_id
+  // module.subnet.private_subnet_id]
   ec2_ami                = var.ec2_ami
   vpc_id                 = module.vpc.koko-vpc_id
   private_subnet         = var.private_subnet

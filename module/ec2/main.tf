@@ -10,12 +10,13 @@ resource "aws_instance" "koko-pub-EC2" {
     vpc_security_group_ids = [aws_security_group.koko-public-sg.id]
     availability_zone = element(var.availability_zones,count.index)
     user_data = <<EOF
-                #!/bin/bash
-                sudo apt update -y
-                sudo apt install apache2 -y
+		        #! /bin/bash
+                sudo apt-get update
+                sudo apt-get install -y apache2
                 sudo systemctl start apache2
-                sudo bash -c "echo my terraform webserver > /var/www/html/index.html"
-    EOF
+                sudo systemctl enable apache2
+		echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
+	EOF
 
     
   tags = {
@@ -34,12 +35,13 @@ resource "aws_instance" "koko-pri-EC2" {
     availability_zone = element(var.availability_zones, count.index)
 
      user_data = <<EOF
-                #!/bin/bash
-                sudo apt update -y
-                sudo apt install apache2 -y
+		        #! /bin/bash
+                sudo apt-get update
+                sudo apt-get install -y apache2
                 sudo systemctl start apache2
-                sudo bash -c "echo my terraform webserver > /var/www/html/index.html"
-    EOF
+                sudo systemctl enable apache2
+		echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
+	EOF
 
 
 
@@ -118,3 +120,134 @@ resource "aws_security_group" "koko-private-sg" {
 
 
 }
+
+# Internet Gateway
+
+resource "aws_internet_gateway" "koko-gw" {
+  vpc_id = var.vpc_id
+
+  tags = {
+    Name = "koko-gw"
+  }
+}
+
+resource "aws_nat_gateway" "koko-nat-gw" {
+  count       = 1
+  allocation_id = aws_eip.koko-natgw-eip.id
+  //subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
+  subnet_id = var.subnet_ids[count.index]
+
+
+  tags = {
+    Name = "koko-nat-gw"
+  }
+}
+
+# Elastic IP
+
+resource "aws_eip" "koko-natgw-eip" {
+  vpc           = true
+  depends_on    = [aws_internet_gateway.koko-gw]
+
+  tags = {
+    Name = "koko-eip"
+    }
+}
+
+
+# Create Elastic Load Balancer
+
+resource "aws_elb" "koko-elb" {
+  availability_zones = var.availability_zones
+
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+
+  
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    target              = "HTTP:80/index.html"
+    interval            = 30
+  }
+
+ 
+
+  tags = {
+    Name = "koko-elb"
+  }
+}
+
+# Public Route Table
+
+resource "aws_route_table" "koko-PublicRT" {
+  vpc_id = var.vpc_id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.koko-gw.id
+
+  }
+
+  tags = {
+    Name = "koko-PublicRT"
+    }
+}
+
+# Private Route Table
+
+resource "aws_route_table" "koko-PrivateRT" {
+  count           = 1
+  vpc_id          = var.vpc_id
+  route {
+    cidr_block    = "0.0.0.0/0"
+  nat_gateway_id  = element(aws_nat_gateway.koko-nat-gw.*.id, 0)
+    
+   }
+tags = {
+    Name = "koko-PrivateRT"
+    }
+}
+# Route Table Association
+
+resource "aws_route_table_association" "koko-PubRT" {
+  count           = length(var.private_subnet)
+  subnet_id       = var.subnet_ids[count.index]
+  route_table_id  = element(aws_route_table.koko-PublicRT.*.id,0)
+}
+
+
+resource "aws_route_table_association" "koko-PriRT" {
+  count            = length(var.private_subnet)
+  subnet_id        = var.subnet_ids[count.index]
+  route_table_id   = element(aws_route_table.koko-PrivateRT.*.id,0)
+}
+
+//   #NAT Gateway Route Table
+// resource "aws_route_table" "koko-natgw-RT" {
+//   vpc_id = var.vpc_id
+//   route {
+//     cidr_block     = "0.0.0.0/0"
+//     nat_gateway_id = aws_nat_gateway.koko-nat-gw.id
+//   }
+//   tags = {
+//     Name = "Route Table for NAT Gateway"
+//   }
+// }
+
+// #NAT Gateway Route Table association
+// resource "aws_route_table_association" "koko-natgw-RT" {
+//   subnet_id      = aws_subnet.koko-pri.id
+//   route_table_id = aws_route_table.koko-natgw-RT.id
+// }
+
+
+
+
+
