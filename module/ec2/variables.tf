@@ -26,11 +26,10 @@ variable "public_subnet" {
 
 }
 
-variable "subnet_ids" {
-    type =list(string)
-    
 
-}
+// variable "subnet_ids" {
+//     type =list(string)    
+// }
 
 variable "vpc_security_group_ids" {
     type = list(string)
@@ -40,5 +39,13 @@ variable "availability_zones" {
     type = list(string)
 
     
+}
+
+variable "subnet_id_1" {
+    type = list(string)
+}
+
+variable "subnet_id_2" {
+    type = list(string)
 }
 

@@ -12,8 +12,6 @@ resource "aws_subnet" "koko-pub" {
 }
 
 
-
-
 resource "aws_subnet" "koko-pri" {
   count     =   length(var.private_subnet)  
   vpc_id    =  var.vpc_id 
@@ -25,6 +23,7 @@ resource "aws_subnet" "koko-pri" {
     Name = "koko-pri- ${element(var.availability_zones, count.index)}"
   }
 }
+
 
 
 

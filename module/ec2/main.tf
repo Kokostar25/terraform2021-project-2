@@ -1,4 +1,5 @@
 
+
 resource "aws_instance" "koko-pub-EC2" {
     
    
@@ -6,18 +7,13 @@ resource "aws_instance" "koko-pub-EC2" {
     ami         = var.ec2_ami
     instance_type = var.instance_type
     key_name = var.ec2_keypair
-    subnet_id = var.subnet_ids[count.index]
+    subnet_id = var.subnet_id_1[count.index]
+    // subnet_id = var.subnet_ids[count.index]
+
     vpc_security_group_ids = [aws_security_group.koko-public-sg.id]
     availability_zone = element(var.availability_zones,count.index)
-    user_data = <<EOF
-		        #! /bin/bash
-                sudo apt-get update
-                sudo apt-get install -y apache2
-                sudo systemctl start apache2
-                sudo systemctl enable apache2
-		echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
-	EOF
-
+    user_data = file("install_apache.sh")
+    
     
   tags = {
     Name = "koko-pub-EC2 - ${element(var.availability_zones,count.index)} "
@@ -30,18 +26,18 @@ resource "aws_instance" "koko-pri-EC2" {
     ami           = var.ec2_ami
     instance_type = var.instance_type
     key_name      = var.ec2_keypair
-    subnet_id = var.subnet_ids[count.index]
+    // subnet_id = var.subnet_ids[count.index]
+    subnet_id = var.subnet_id_2[count.index]
     vpc_security_group_ids = [aws_security_group.koko-private-sg.id]
     availability_zone = element(var.availability_zones, count.index)
-
-     user_data = <<EOF
-		        #! /bin/bash
-                sudo apt-get update
-                sudo apt-get install -y apache2
-                sudo systemctl start apache2
-                sudo systemctl enable apache2
-		echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
-	EOF
+  //   user_data = <<EOF
+	// 	        #! /bin/bash
+  //               sudo apt-get update
+  //               sudo apt-get install -y apache2
+  //               sudo systemctl start apache2
+  //               sudo systemctl enable apache2
+	// 	echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
+	// EOF
 
 
 
@@ -134,8 +130,10 @@ resource "aws_internet_gateway" "koko-gw" {
 resource "aws_nat_gateway" "koko-nat-gw" {
   count       = 1
   allocation_id = aws_eip.koko-natgw-eip.id
-  //subnet_id     = element(aws_subnet.public_subnet.*.id, 0)
-  subnet_id = var.subnet_ids[count.index]
+
+  subnet_id = var.subnet_id_1[count.index]
+  // subnet_id = var.subnet_ids[count.index]
+  
 
 
   tags = {
@@ -158,8 +156,10 @@ resource "aws_eip" "koko-natgw-eip" {
 # Create Elastic Load Balancer
 
 resource "aws_elb" "koko-elb" {
-  availability_zones = var.availability_zones
-
+  // availability_zones = var.availability_zones
+  subnets = var.subnet_id_1
+  security_groups = [aws_security_group.koko-public-sg.id]
+  
 
   listener {
     instance_port     = 80
@@ -177,6 +177,11 @@ resource "aws_elb" "koko-elb" {
     interval            = 30
   }
 
+  instances                   = [aws_instance.koko-pub-EC2[0].id, aws_instance.koko-pub-EC2[1].id]
+  cross_zone_load_balancing   = true
+  idle_timeout                = 100
+  connection_draining         = true
+  connection_draining_timeout = 300
  
 
   tags = {
@@ -217,16 +222,16 @@ tags = {
 # Route Table Association
 
 resource "aws_route_table_association" "koko-PubRT" {
-  count           = length(var.private_subnet)
-  subnet_id       = var.subnet_ids[count.index]
+  count           = length(var.public_subnet)
+  subnet_id       = var.subnet_id_1[count.index]
   route_table_id  = element(aws_route_table.koko-PublicRT.*.id,0)
 }
 
 
 resource "aws_route_table_association" "koko-PriRT" {
   count            = length(var.private_subnet)
-  subnet_id        = var.subnet_ids[count.index]
-  route_table_id   = element(aws_route_table.koko-PrivateRT.*.id,0)
+  subnet_id        = var.subnet_id_2[count.index]
+  route_table_id   = element(aws_route_table.koko-PrivateRT.*.id,1)
 }
 
 //   #NAT Gateway Route Table
@@ -243,7 +248,7 @@ resource "aws_route_table_association" "koko-PriRT" {
 
 // #NAT Gateway Route Table association
 // resource "aws_route_table_association" "koko-natgw-RT" {
-//   subnet_id      = aws_subnet.koko-pri.id
+//   subnet_id = var.subnet_id_2[count.index]
 //   route_table_id = aws_route_table.koko-natgw-RT.id
 // }
 
