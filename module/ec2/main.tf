@@ -60,6 +60,7 @@ resource "aws_security_group" "koko-public-sg" {
     to_port          = 80
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
+    
 
   }
     
@@ -76,12 +77,15 @@ resource "aws_security_group" "koko-public-sg" {
   egress {
     from_port        = 0
     to_port          = 0
-    protocol         = "tcp"
+    protocol         = "-1"
     cidr_blocks      = ["0.0.0.0/0"]
   }
     
   
 }
+
+
+
 
 resource "aws_security_group" "koko-private-sg" {
   name        = "koko-private-sg"
@@ -108,7 +112,7 @@ resource "aws_security_group" "koko-private-sg" {
   egress {
     from_port        = 0
     to_port          = 0
-    protocol         = "tcp"
+    protocol         = "-1"
     cidr_blocks      = ["0.0.0.0/0"]
   }
     
@@ -155,39 +159,106 @@ resource "aws_eip" "koko-natgw-eip" {
 
 # Create Elastic Load Balancer
 
-resource "aws_elb" "koko-elb" {
-  // availability_zones = var.availability_zones
-  subnets = var.subnet_id_1
-  security_groups = [aws_security_group.koko-public-sg.id]
+// resource "aws_elb" "koko-elb" {
+//   // availability_zones = var.availability_zones
+//   subnets = var.subnet_id_1
+//   //security_groups = [aws_security_group.koko-public-sg.id]
+//   security_groups = [aws_security_group.koko-elb-sg.id]
   
 
-  listener {
-    instance_port     = 80
-    instance_protocol = "http"
-    lb_port           = 80
-    lb_protocol       = "http"
-  }
+//   listener {
+//     instance_port     = 80
+//     instance_protocol = "http"
+//     lb_port           = 80
+//     lb_protocol       = "http"
+//   }
 
   
-  health_check {
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 3
-    target              = "HTTP:80/index.html"
-    interval            = 30
-  }
+//   health_check {
+//     healthy_threshold   = 2
+//     unhealthy_threshold = 2
+//     timeout             = 3
+//     target              = "HTTP:80/index.html"
+//     interval            = 30
+//   }
 
-  instances                   = [aws_instance.koko-pub-EC2[0].id, aws_instance.koko-pub-EC2[1].id]
-  cross_zone_load_balancing   = true
-  idle_timeout                = 100
-  connection_draining         = true
-  connection_draining_timeout = 300
+//   instances                   = [aws_instance.koko-pub-EC2[0].id, aws_instance.koko-pub-EC2[1].id]
+//   cross_zone_load_balancing   = true
+//   idle_timeout                = 100
+//   connection_draining         = true
+//   connection_draining_timeout = 300
  
 
+//   tags = {
+//     Name = "koko-elb"
+//   }
+// }
+
+
+resource "aws_lb" "koko-lb" {
+  name               = "koko-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.koko-lb-sg.id]
+  subnets            = var.subnet_id_1
+
+  enable_deletion_protection = true
+
+  
+
   tags = {
-    Name = "koko-elb"
+    Name = "koko-lb"
   }
 }
+
+# Target group for lb
+
+resource "aws_lb_target_group" "koko-tg" {
+  name     = "tf-koko-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = var.vpc_id
+
+health_check {
+    port     = 80
+    protocol = "HTTP"
+  }
+}
+
+resource "aws_lb_listener" "tf-listener" {
+  load_balancer_arn = aws_lb.koko-lb.id
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    target_group_arn = aws_lb_target_group.koko-tg.id
+    type             = "forward"
+    
+
+  }
+}
+  
+
+
+# Security Group for ALB
+resource "aws_security_group" "koko-lb-sg" {
+    name = "tf-koko-lb-sg"
+    description = "allow HTTPS to tf-koko-elb-sg  Load Balancer (ALB)"
+    vpc_id = var.vpc_id
+    ingress {
+        from_port = "80"
+        to_port = "80"
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+
+    }
+    tags = {
+        Name = "koko-lb-sg"
+    }
+}
+
+
+
 
 # Public Route Table
 
@@ -200,7 +271,7 @@ resource "aws_route_table" "koko-PublicRT" {
 
   }
 
-  tags = {
+    tags = {
     Name = "koko-PublicRT"
     }
 }
