@@ -1,19 +1,24 @@
 
 
 resource "aws_instance" "koko-pub-EC2" {
-    
-   
+     
     count       =length(var.public_subnet) 
     ami         = var.ec2_ami
     instance_type = var.instance_type
     key_name = var.ec2_keypair
     subnet_id = var.subnet_id_1[count.index]
-    // subnet_id = var.subnet_ids[count.index]
-
     vpc_security_group_ids = [aws_security_group.koko-public-sg.id]
     availability_zone = element(var.availability_zones,count.index)
-    user_data = file("install_apache.sh")
-    
+    associate_public_ip_address = true
+    user_data = <<-EOF
+            #! /bin/bash
+            sudo apt-get update -y
+            sudo apt-get upgrade -y
+            sudo apt-get install apache2 -y
+            sudo systemctl start apache2 
+            sudo chmod +x /var/www/html/index.html
+            sudo bash -c 'echo Deployed via Terraform > /var/www/html/index.html'
+            EOF
     
   tags = {
     Name = "koko-pub-EC2 - ${element(var.availability_zones,count.index)} "
@@ -26,26 +31,14 @@ resource "aws_instance" "koko-pri-EC2" {
     ami           = var.ec2_ami
     instance_type = var.instance_type
     key_name      = var.ec2_keypair
-    // subnet_id = var.subnet_ids[count.index]
     subnet_id = var.subnet_id_2[count.index]
     vpc_security_group_ids = [aws_security_group.koko-private-sg.id]
     availability_zone = element(var.availability_zones, count.index)
-  //   user_data = <<EOF
-	// 	        #! /bin/bash
-  //               sudo apt-get update
-  //               sudo apt-get install -y apache2
-  //               sudo systemctl start apache2
-  //               sudo systemctl enable apache2
-	// 	echo "<h1>Deployed via Terraform</h1>" | sudo tee /var/www/html/index.html
-	// EOF
-
-
-
+  
   tags = {
     Name = "koko-pri-EC2 -${element(var.availability_zones, count.index)} "
   }
 }
-
 
 # Create Security group
 
@@ -59,7 +52,8 @@ resource "aws_security_group" "koko-public-sg" {
     from_port        = 80
     to_port          = 80
     protocol         = "tcp"
-    cidr_blocks      = ["0.0.0.0/0"]
+    // cidr_blocks      = ["0.0.0.0/0"]
+    security_groups   = [aws_security_group.koko-lb-sg.id]
     
 
   }
@@ -83,9 +77,6 @@ resource "aws_security_group" "koko-public-sg" {
     
   
 }
-
-
-
 
 resource "aws_security_group" "koko-private-sg" {
   name        = "koko-private-sg"
@@ -115,9 +106,7 @@ resource "aws_security_group" "koko-private-sg" {
     protocol         = "-1"
     cidr_blocks      = ["0.0.0.0/0"]
   }
-    
   
-
 
 }
 
@@ -134,12 +123,8 @@ resource "aws_internet_gateway" "koko-gw" {
 resource "aws_nat_gateway" "koko-nat-gw" {
   count       = 1
   allocation_id = aws_eip.koko-natgw-eip.id
-
   subnet_id = var.subnet_id_1[count.index]
-  // subnet_id = var.subnet_ids[count.index]
   
-
-
   tags = {
     Name = "koko-nat-gw"
   }
@@ -155,46 +140,7 @@ resource "aws_eip" "koko-natgw-eip" {
     Name = "koko-eip"
     }
 }
-
-
-# Create Elastic Load Balancer
-
-// resource "aws_elb" "koko-elb" {
-//   // availability_zones = var.availability_zones
-//   subnets = var.subnet_id_1
-//   //security_groups = [aws_security_group.koko-public-sg.id]
-//   security_groups = [aws_security_group.koko-elb-sg.id]
-  
-
-//   listener {
-//     instance_port     = 80
-//     instance_protocol = "http"
-//     lb_port           = 80
-//     lb_protocol       = "http"
-//   }
-
-  
-//   health_check {
-//     healthy_threshold   = 2
-//     unhealthy_threshold = 2
-//     timeout             = 3
-//     target              = "HTTP:80/index.html"
-//     interval            = 30
-//   }
-
-//   instances                   = [aws_instance.koko-pub-EC2[0].id, aws_instance.koko-pub-EC2[1].id]
-//   cross_zone_load_balancing   = true
-//   idle_timeout                = 100
-//   connection_draining         = true
-//   connection_draining_timeout = 300
- 
-
-//   tags = {
-//     Name = "koko-elb"
-//   }
-// }
-
-
+# ALB 
 resource "aws_lb" "koko-lb" {
   name               = "koko-lb"
   internal           = false
@@ -202,15 +148,24 @@ resource "aws_lb" "koko-lb" {
   security_groups    = [aws_security_group.koko-lb-sg.id]
   subnets            = var.subnet_id_1
 
-  enable_deletion_protection = true
-
-  
-
+  enable_deletion_protection = false   
   tags = {
     Name = "koko-lb"
   }
 }
 
+resource "aws_lb_target_group_attachment" "tf-attach-1" {
+  target_group_arn = aws_lb_target_group.koko-tg.id
+  target_id        = aws_instance.koko-pub-EC2[0].id
+  port             = 80
+}
+
+
+resource "aws_lb_target_group_attachment" "tf-attach-2" {
+  target_group_arn = aws_lb_target_group.koko-tg.id
+  target_id        = aws_instance.koko-pub-EC2[1].id
+  port             = 80
+}
 # Target group for lb
 
 resource "aws_lb_target_group" "koko-tg" {
@@ -237,8 +192,6 @@ resource "aws_lb_listener" "tf-listener" {
 
   }
 }
-  
-
 
 # Security Group for ALB
 resource "aws_security_group" "koko-lb-sg" {
@@ -252,12 +205,17 @@ resource "aws_security_group" "koko-lb-sg" {
         cidr_blocks = ["0.0.0.0/0"]
 
     }
+    egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
     tags = {
         Name = "koko-lb-sg"
     }
 }
-
-
 
 
 # Public Route Table
@@ -305,23 +263,6 @@ resource "aws_route_table_association" "koko-PriRT" {
   route_table_id   = element(aws_route_table.koko-PrivateRT.*.id,1)
 }
 
-//   #NAT Gateway Route Table
-// resource "aws_route_table" "koko-natgw-RT" {
-//   vpc_id = var.vpc_id
-//   route {
-//     cidr_block     = "0.0.0.0/0"
-//     nat_gateway_id = aws_nat_gateway.koko-nat-gw.id
-//   }
-//   tags = {
-//     Name = "Route Table for NAT Gateway"
-//   }
-// }
-
-// #NAT Gateway Route Table association
-// resource "aws_route_table_association" "koko-natgw-RT" {
-//   subnet_id = var.subnet_id_2[count.index]
-//   route_table_id = aws_route_table.koko-natgw-RT.id
-// }
 
 
 

@@ -32,8 +32,6 @@ module "networking" {
   instance_type = var.instance_type
   subnet_id_1 = module.subnet.public_subnet_id
   subnet_id_2 = module.subnet.private_subnet_id
-
-  // subnet_ids    = ["module.subnet.private_subnet_id","module.subnet.public_subnet_id"]
   ec2_ami                = var.ec2_ami
   vpc_id                 = module.vpc.koko-vpc_id
   private_subnet         = var.private_subnet
