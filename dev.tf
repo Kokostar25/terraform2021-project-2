@@ -1,21 +1,39 @@
 terraform {
+  
+  backend "s3" {
+    profile = "devops-koko"
+    bucket = "koko-1dev"
+    key    = "backend/terraform.tfstate"
+    region = "us-east-1"
+    dynamodb_table = "globo-tfstatelock-91437"
+    encrypt = true
 
+  }
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 3.0"
     }
-
+  
   }
-
 }
+
+
 provider "aws" {
   region  = "us-east-1"
   profile = "devops-koko"
-}
+  
+  
+  }
+
+
+
 module "vpc" {
   source = "./module/vpc"
 }
+
+
+
 
 module "subnet" {
   source             = "./module/subnet"
